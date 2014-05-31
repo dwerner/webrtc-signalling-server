@@ -7,7 +7,8 @@ var WebSocketServer = require("ws").Server;
 // This test series uses a real WebSocketServer
 // But the implementation is coded against EventEmitter
 function signal(port) {
-  return server.listen(new WebSocketServer({port:port})); 
+  var transport = new WebSocketServer({port:port, clientTracking:true});
+  return server.listen(transport); 
 }
 
 var debugPort = 8888;
@@ -59,11 +60,41 @@ describe("Signalling Server", function (){
 
   it("should relay candidate sdp records to the intended recipient.", function (done){
     signal(++debugPort);
-    ws().on("open", function (){
+    var candidate = JSON.stringify({source: "dan", target:"steve", candidate:"sdp:asdf"});
+    var dan = ws();
+    dan.on("open", function (){
+      dan.send(JSON.stringify({register:"dan"}));
     }).once("message", function (data, flags){
-      
+      assert.equal("ack registered dan", data);
+      var steve = ws();
+      steve.on("open", function (){
+        steve.send(JSON.stringify({register:"steve"})); 
+      });
+      steve.once("message", function (s,p) {
+        assert.equal("ack registered steve", s);
+        steve.on("message", function (c, fa){
+          assert.equal(c, candidate);
+          done();
+        });
+        dan.send(candidate);
+      });
     });
-  
+  });
+
+  it("should not hold stale (closed) registered connections", function (done) {
+    signal(++debugPort);
+    ws().on("open", function(){
+      this.send(JSON.stringify({register:"dan"}));
+    }).once("message", function (data,flags){
+      assert.equal("ack registered dan", data);
+      this.close();
+      ws().on("open", function (){
+        this.send("list registered users")     
+      }).once("message", function (d2, f2){
+        assert.equal(d2, "[]");
+        done();
+      });
+    });
   });
 
   it("should respond to bad messages with 'unknown message'", function(done){
