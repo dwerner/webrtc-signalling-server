@@ -5,8 +5,6 @@ describe("Harmony generators", function(){
       var resolve;
       try {
         while(resolve = yield value) {
-          console.log("value:" + value);
-          console.log("resolve:" +resolve);
         }
       } catch (exitCallback) {
         exitCallback();
